@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JPEGコンバーター</title>
+  <meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' blob:; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"><link rel="icon" href="%BASE_URL%favicon.svg">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">BROWSER-ONLY IMAGE TOOL</p>
+        <h1>JPEGコンバーター</h1>
+        <p>HEIC / HEIF / JPG / JPEG を軽量JPEGに変換します（ブラウザ内処理）</p>
+      </div>
+      <div class="privacy-badge"><span aria-hidden="true">●</span> 画像は外部へ送信しません</div>
+    </header>
+
+    <section class="system-card" aria-label="システム状態">
+      <div><span class="status-dot" id="magickDot"></span><strong>ブラウザ内画像処理</strong><span id="magickStatus">変換時にWASMを読み込み</span></div>
+      <div><span class="status-dot" id="heicDot"></span><strong>入力形式</strong><span id="heicStatus">HEIC / HEIF / JPEG</span></div>
+    </section>
+    <div class="notice error hidden" id="systemError" role="alert"></div>
+
+    <section class="settings-card">
+      <div class="section-heading">
+        <div><span class="step">1</span><h2>変換設定</h2></div>
+        <span class="limit-note" id="limitNote">一度に20枚まで</span>
+      </div>
+
+      <div class="settings-grid">
+        <label class="field">
+          <span>長辺サイズ</span>
+          <select id="longEdge">
+            <option value="0">原寸（リサイズなし）</option>
+            <option value="1800">1800 px</option>
+            <option value="1500">1500 px</option>
+            <option value="1200" selected>1200 px</option>
+            <option value="900">900 px</option>
+            <option value="600">600 px</option>
+            <option value="450">450 px</option>
+            <option value="custom">カスタム</option>
+          </select>
+        </label>
+        <label class="field custom-field hidden" id="customField">
+          <span>カスタム長辺</span>
+          <div class="with-unit"><input id="customLongEdge" type="number" min="1" max="100000" step="1" value="1200"><span>px</span></div>
+        </label>
+        <label class="field quality-field">
+          <span>JPEG品質 <output id="qualityValue">85</output></span>
+          <input id="quality" type="range" min="1" max="100" step="1" value="85">
+          <small>通常は82〜88がおすすめです</small>
+        </label>
+        <div class="field folder-field">
+          <span>出力先フォルダ</span>
+          <button class="secondary" id="chooseFolder" type="button">フォルダを選択</button>
+          <button class="ghost" id="useDownloads" type="button">ダウンロード保存を使う</button><small id="folderStatus">個別ダウンロード / ZIP</small>
+        </div>
+      </div>
+
+      <div class="fixed-options" aria-label="固定オプション">
+        <span>✓ メタデータ削除（GPS含む）</span>
+        <span>✓ sRGBに変換</span>
+        <span>✓ 元画像を保持</span>
+      </div>
+    </section>
+
+    <section class="work-card">
+      <div class="section-heading">
+        <div><span class="step">2</span><h2>画像を追加</h2></div>
+        <span id="fileCount">0枚</span>
+      </div>
+
+      <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="画像をドラッグ＆ドロップ、またはファイルを選択">
+        <div class="drop-icon" aria-hidden="true">↓</div>
+        <strong>ここに画像をドラッグ＆ドロップ</strong>
+        <span>または</span>
+        <button class="secondary" id="chooseFiles" type="button">ファイルを選択</button>
+        <small>HEIC / HEIF / JPG / JPEG・最大20枚</small>
+        <input id="fileInput" type="file" accept=".heic,.heif,.jpg,.jpeg,image/heic,image/heif,image/jpeg" multiple hidden>
+      </div>
+
+      <div class="notice error hidden" id="selectionError" role="alert"></div>
+
+      <div class="file-panel hidden" id="filePanel">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ファイル名</th><th>形式</th><th>サイズ</th><th>状態</th></tr></thead>
+            <tbody id="fileList"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="progress-panel hidden" id="progressPanel">
+        <div class="progress-copy"><strong id="progressLabel">準備中</strong><span id="progressPercent">0%</span></div>
+        <progress id="progressBar" max="100" value="0"></progress>
+        <div class="stats">
+          <span>成功 <strong id="successCount">0</strong></span>
+          <span>失敗 <strong id="failureCount">0</strong></span>
+          <span>スキップ <strong id="skipCount">0</strong></span>
+          <span id="sizeSummary"></span>
+          <span id="timeSummary"></span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="convertButton" type="button" disabled>変換開始</button>
+        <button class="secondary" id="zipButton" type="button" disabled>まとめてZIP保存</button><button class="ghost" id="cancelButton" type="button" disabled>クリア</button>
+      </div>
+    </section>
+
+    <footer>全処理はこのブラウザ内で実行します。元画像は変更しません。<br>保存待ちの画像は「クリア」またはページを閉じると解放されます。フォルダ保存後のデータは直ちに解放します。<br><a href="%BASE_URL%licenses/index.html" target="_blank" rel="noopener">ライセンス・NOTICE</a></footer>
+  </main>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
